@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masjid Timings Finder</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Noto+Nastaliq+Urdu:wght@400&display=swap">
+<style>
+:root{--green:#0f5132;--green2:#17663f;--tint:#eef5f0;--ink:#1c2a22;--mute:#5d6d63;--line:#d9e3dc;--bg:#fbfcfa;--card:#fff;--gold:#b8892b}
+@media (prefers-color-scheme:dark){:root{--ink:#e8efe9;--mute:#9db0a3;--line:#2b3a31;--bg:#101813;--card:#17221b;--tint:#1d2b22;--green:#4fb583;--green2:#3d9c6e}}
+*{box-sizing:border-box}
+body{margin:0;font-family:Figtree,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+.ur{font-family:'Noto Nastaliq Urdu',serif;direction:rtl}
+header{background:#0f5132;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+header a{color:#fff;text-decoration:none;font-weight:700;font-size:18px}
+header button{background:transparent;border:1px solid #ffffff80;color:#fff;border-radius:8px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:24px;margin:8px 0 4px}h2{font-size:18px;margin:20px 0 8px}
+p.sub{color:var(--mute);margin:0 0 16px}
+input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--card);color:var(--ink)}
+label{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
+.btn{display:inline-block;background:var(--green);color:#fff;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;text-align:center}
+.btn.alt{background:transparent;color:var(--green);border:1px solid var(--green)}
+.btn.red{background:#b3261e}.btn.full{width:100%}.btn.sm{padding:7px 12px;font-size:14px}
+.card{display:block;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0;color:inherit;text-decoration:none}
+.card b{font-size:17px}.card small{color:var(--mute);display:block}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{padding:11px 12px;text-align:left;border-top:1px solid var(--line)}
+th{background:var(--tint);font-size:13px;color:var(--mute);border-top:0}
+td.t{font-variant-numeric:tabular-nums}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
+.grid{display:grid;grid-template-columns:70px 1fr 1fr;gap:8px;align-items:center}
+.msg{padding:10px 12px;border-radius:10px;margin:12px 0;background:var(--tint)}.msg.err{background:#fdeceb;color:#8c1d18}
+.top{color:var(--green);text-decoration:none;font-weight:600}
+.empty{text-align:center;color:var(--mute);padding:30px 0}
+nav{display:flex;gap:6px;padding:8px 16px;background:var(--tint);border-bottom:1px solid var(--line);overflow-x:auto}
+nav a{color:var(--green);text-decoration:none;font-weight:600;padding:6px 12px;border-radius:20px;white-space:nowrap}
+nav a:hover{background:var(--card)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:6px 12px;font:inherit;font-size:14px;white-space:nowrap;cursor:pointer}
+.chip.on{background:var(--green);color:#fff;border-color:var(--green)}
+.mc{display:flex;gap:12px;align-items:center}.mc>div{min-width:0}
+.thumb{width:84px;height:68px;border-radius:10px;object-fit:cover;flex:0 0 84px}
+.ph{background:var(--tint);display:flex;align-items:center;justify-content:center;font-size:30px}
+.nx{color:var(--gold)!important;font-weight:600;margin-top:2px}
+.hero{width:100%;height:200px;object-fit:cover;border-radius:14px;margin:10px 0}
+tr.now td{background:var(--tint);font-weight:700}
+</style>
+</head>
+<body>
+<header><a href="#/">&#128332; Masjid Timings</a><button id="authBtn" onclick="location.hash='#/login'">Staff login</button></header>
+<nav><a href="#/">Home</a><a href="#/jummah">Jummah</a><a href="#/favs">My masjids</a></nav>
+<main id="app"></main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://vypgjmghvsygexdlrdui.supabase.co";
+const SUPABASE_KEY = "sb_publishable_zhUgUmnOvStNyEX3iq5rVA_m8bY9dXs";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const PR = [["fajr","Fajr"],["zuhr","Zuhr"],["asr","Asr"],["maghrib","Maghrib"],["isha","Isha"]];
+const $ = (id) => document.getElementById(id);
+const app = $("app");
+let session = null, role = null, myMasjid = null;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function t12(t){ if(!t) return "-"; const [h,m]=t.split(":").map(Number); return ((h%12)||12)+":"+String(m).padStart(2,"0")+" "+(h>=12?"PM":"AM"); }
+function note(text, err){ return text ? `<div class="msg ${err?"err":""}">${esc(text)}</div>` : ""; }
+
+async function loadRole(){
+  const { data } = await db.auth.getSession();
+  session = data.session; role = null; myMasjid = null;
+  if (session){
+    const a = await db.from("admins").select("email").maybeSingle();
+    if (a.data) role = "admin";
+    else { const s = await db.from("staff").select("masjid_id").maybeSingle(); if (s.data){ role="staff"; myMasjid=s.data.masjid_id; } }
+  }
+  const b = $("authBtn");
+  b.textContent = session ? "My panel" : "Staff login";
+  b.onclick = () => location.hash = session ? "#/panel" : "#/login";
+}
+
+async function route(){
+  const h = location.hash.replace(/^#\/?/, "").split("/");
+  try{
+    if (h[0]==="login") return viewLogin();
+    if (h[0]==="panel") return viewPanel();
+    if (h[0]==="jummah") return viewJummah();
+    if (h[0]==="favs") return viewFavs();
+    if (h[0]==="edit") return viewEdit(h[1]);
+    if (h[0]==="masjid" && h[1]) return viewMasjid(h[1]);
+    return viewHome();
+  }catch(e){ app.innerHTML = note("Something went wrong: "+e.message, true); }
+}
+
+/* ---------- Public ---------- */
+const store = { get(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v??d}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
+const favs = () => store.get("favs", []), homeId = () => store.get("home", null);
+function toggleFav(id){ const f=favs(); const n=f.includes(id)?f.filter(x=>x!==id):[...f,id]; store.set("favs",n); if(!n.includes(id)&&homeId()===id) store.set("home",null); }
+function toggleHome(id){ store.set("home", homeId()===id?null:id); if(!favs().includes(id)) store.set("favs",[...favs(),id]); }
+function km(a,b,c,d){ const r=x=>x*Math.PI/180, A=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2; return 12742*Math.asin(Math.sqrt(A)); }
+function nextPrayer(tm){
+  const n=new Date(), cur=n.getHours()*60+n.getMinutes();
+  for(const [k,nm] of PR){ const t=tm?.[k]?.jamaat||tm?.[k]?.azan; if(!t) continue; const [h,m]=t.split(":").map(Number); if(h*60+m>cur) return {k,nm,t}; }
+  const t=tm?.fajr?.jamaat||tm?.fajr?.azan; return t?{k:"fajr",nm:"Fajr",t,tomorrow:true}:null;
+}
+const nextTxt = (m) => { const p=nextPrayer(m.timings); return p?`${p.nm} ${t12(p.t)}${p.tomorrow?" (tomorrow)":""}`:"-"; };
+const photo = (m,c) => m.photo_url ? `<img class="${c}" src="${esc(m.photo_url)}" alt="" loading="lazy">` : `<div class="${c} ph">&#128332;</div>`;
+const card = (m,d) => `<a class="card mc" href="#/masjid/${m.id}">${photo(m,"thumb")}<div><b>${esc(m.name)}</b><small>${esc(m.area)}${d!=null?" &bull; "+d.toFixed(1)+" km":""}</small><small class="nx">Next: ${esc(nextTxt(m))}</small></div></a>`;
+async function loadAll(){ const r=await db.from("masjids").select("*").order("name"); if(r.error) throw r.error; return r.data; }
+let userPos = null;
+
+async function viewHome(){
+  app.innerHTML = `<h1>Pick your masjid</h1><p class="sub">Hyderabad masjid prayer timings.</p><div id="hm"></div>
+    <div class="row"><input id="q" placeholder="Search masjid name or area..." autocomplete="off"><button class="btn alt" id="near" style="flex:0 0 auto">&#128205; Near me</button></div>
+    <div id="areas" class="chips"></div><div id="list"><p class="empty">Loading...</p></div>`;
+  const data = await loadAll(); let area = "";
+  const hm = data.find(m => m.id === homeId());
+  if (hm) $("hm").innerHTML = `<h2>My home masjid</h2>` + card(hm);
+  const areas = [...new Set(data.map(m => m.area))].sort();
+  const draw = () => {
+    const q = $("q").value.trim().toLowerCase();
+    $("areas").innerHTML = [`<button class="chip ${area?"":"on"}" data-a="">All ${data.length}</button>`].concat(areas.map(a => `<button class="chip ${area===a?"on":""}" data-a="${esc(a)}">${esc(a)} ${data.filter(m=>m.area===a).length}</button>`)).join("");
+    document.querySelectorAll(".chip").forEach(c => c.onclick = () => { area = c.dataset.a; draw(); });
+    const d = m => (userPos && m.lat != null && m.lng != null) ? km(userPos.lat, userPos.lng, m.lat, m.lng) : null;
+    let rows = data.filter(m => (!area || m.area === area) && (m.name+" "+m.area).toLowerCase().includes(q));
+    if (userPos) rows = rows.sort((a,b) => (d(a) ?? 1e9) - (d(b) ?? 1e9));
+    $("list").innerHTML = rows.length ? rows.map(m => card(m, d(m))).join("") : `<p class="empty">No masjid found.</p>`;
+  };
+  $("q").oninput = draw;
+  $("near").onclick = () => {
+    if (!navigator.geolocation) return alert("Location is not available on this device.");
+    navigator.geolocation.getCurrentPosition(p => { userPos = { lat: p.coords.latitude, lng: p.coords.longitude }; draw(); }, () => alert("Please allow location access to see nearby masjids."));
+  };
+  draw();
+}
+
+async function viewJummah(){
+  app.innerHTML = `<h1>Jummah timings</h1><p class="sub">Friday khutbah times.</p><div id="list"><p class="empty">Loading...</p></div>`;
+  const data = (await loadAll()).filter(m => m.khutbah1 || m.khutbah2).sort((a,b) => (a.khutbah1||"99").localeCompare(b.khutbah1||"99"));
+  $("list").innerHTML = data.length ? data.map(m => `<a class="card" href="#/masjid/${m.id}"><b>${esc(m.name)}</b><small>${esc(m.area)}</small><small>Khutbah 1: ${t12(m.khutbah1)} &bull; Khutbah 2: ${t12(m.khutbah2)}</small></a>`).join("") : `<p class="empty">No Jummah timings yet.</p>`;
+}
+
+async function viewFavs(){
+  app.innerHTML = `<h1>My masjids</h1><p class="sub">Tap Save on a masjid to keep it here.</p><div id="list"></div>`;
+  const f = favs(), data = (await loadAll()).filter(m => f.includes(m.id));
+  $("list").innerHTML = data.length ? data.map(m => card(m)).join("") : `<p class="empty">No saved masjids yet.</p>`;
+}
+
+async function viewMasjid(id){
+  const { data:m, error } = await db.from("masjids").select("*").eq("id", id).maybeSingle();
+  if (error || !m) return app.innerHTML = `<a class="top" href="#/">&lsaquo; Back</a>`+note("Masjid not found.", true);
+  const map = (m.lat != null && m.lng != null) ? `https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}` : "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(m.name+" "+(m.address||m.area)+" "+m.city);
+  const np = nextPrayer(m.timings), isFav = favs().includes(id), isHome = homeId() === id;
+  app.innerHTML = `<a class="top" href="#/">&lsaquo; All masjids</a>
+    ${m.photo_url ? `<img class="hero" src="${esc(m.photo_url)}" alt="">` : ""}
+    <h1>${esc(m.name)}</h1><div class="ur" style="font-size:20px">${esc(m.name_urdu)}</div>
+    <p class="sub">${esc(m.address||m.area)}${m.phone?" &bull; "+esc(m.phone):""}</p>
+    <div class="row"><a class="btn" href="${map}" target="_blank" rel="noopener">Get directions</a><button class="btn alt" id="fav">${isFav?"&#9733; Saved":"&#9734; Save"}</button></div>
+    <p><button class="btn alt full" id="home">${isHome?"&#10003; This is my home masjid":"Set as my home masjid"}</button></p>
+    <h2>Namaz timings</h2>
+    <table><tr><th>Prayer</th><th>Azan</th><th>Jamaat</th></tr>
+    ${PR.map(([k,n]) => `<tr class="${np&&!np.tomorrow&&np.k===k?"now":""}"><td>${n}</td><td class="t">${t12(m.timings?.[k]?.azan)}</td><td class="t">${t12(m.timings?.[k]?.jamaat)}</td></tr>`).join("")}</table>
+    ${(m.khutbah1||m.khutbah2) ? `<h2>Friday Jumu'ah</h2><table><tr><td>Khutbah 1</td><td class="t">${t12(m.khutbah1)}</td></tr><tr><td>Khutbah 2</td><td class="t">${t12(m.khutbah2)}</td></tr></table>` : ""}`;
+  $("fav").onclick = () => { toggleFav(id); viewMasjid(id); };
+  $("home").onclick = () => { toggleHome(id); viewMasjid(id); };
+}
+
+/* ---------- Login ---------- */
+function viewLogin(msg){
+  if (session) return location.hash = "#/panel";
+  app.innerHTML = `<h1>Staff login</h1><p class="sub">For masjid staff and the super admin.</p>${note(msg,true)}
+    <label>Email</label><input id="em" type="email" autocomplete="username">
+    <label>Password</label><input id="pw" type="password" autocomplete="current-password">
+    <p><button class="btn full" id="go">Log in</button></p>`;
+  $("go").onclick = async () => {
+    const { error } = await db.auth.signInWithPassword({ email: $("em").value.trim(), password: $("pw").value });
+    if (error) return viewLogin("Wrong email or password.");
+    await loadRole(); location.hash = "#/panel"; route();
+  };
+}
+
+/* ---------- Panel ---------- */
+async function viewPanel(){
+  if (!session) return location.hash = "#/login";
+  if (role === "staff") return viewEdit(myMasjid);
+  if (role !== "admin") return app.innerHTML = `<h1>My panel</h1>${note("Your account is not linked to a masjid yet. Please contact the admin.", true)}<button class="btn alt" onclick="logout()">Log out</button>`;
+  const [m, s] = await Promise.all([db.from("masjids").select("id,name,area").order("name"), db.from("staff").select("email,masjid_id").order("email")]);
+  const masjids = m.data || [], staff = s.data || [];
+  const nameOf = (id) => (masjids.find(x => x.id===id)||{}).name || "-";
+  app.innerHTML = `<h1>Admin panel</h1>
+    <div class="row"><a class="btn" href="#/edit/new">+ Add masjid</a><button class="btn alt" onclick="logout()">Log out</button></div>
+    <h2>Masjids (${masjids.length})</h2>
+    ${masjids.map(x => `<div class="card"><b>${esc(x.name)}</b><small>${esc(x.area)}</small>
+      <div class="row" style="margin-top:8px"><a class="btn sm alt" href="#/edit/${x.id}">Edit</a><button class="btn sm red" data-del="${x.id}">Delete</button></div></div>`).join("") || `<p class="empty">No masjids yet.</p>`}
+    <h2>Staff</h2>
+    ${staff.map(x => `<div class="card"><b>${esc(x.email)}</b><small>${esc(nameOf(x.masjid_id))}</small>
+      <div style="margin-top:8px"><button class="btn sm red" data-rm="${esc(x.email)}">Remove</button></div></div>`).join("") || `<p class="empty">No staff added yet.</p>`}
+    <div class="card"><b>Add staff</b>
+      <label>Staff email (must have a login)</label><input id="se" type="email">
+      <label>Masjid</label><select id="sm">${masjids.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select>
+      <p><button class="btn full" id="addStaff">Add staff</button></p><div id="sm-msg"></div></div>`;
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    if (!confirm("Delete this masjid and its timings?")) return;
+    const r = await db.from("masjids").delete().eq("id", b.dataset.del); if (r.error) alert(r.error.message); viewPanel();
+  });
+  document.querySelectorAll("[data-rm]").forEach(b => b.onclick = async () => {
+    if (!confirm("Remove this staff member?")) return;
+    const r = await db.from("staff").delete().eq("email", b.dataset.rm); if (r.error) alert(r.error.message); viewPanel();
+  });
+  $("addStaff").onclick = async () => {
+    const email = $("se").value.trim().toLowerCase(); if (!email || !$("sm").value) return;
+    const r = await db.from("staff").upsert({ email, masjid_id: $("sm").value });
+    if (r.error) $("sm-msg").innerHTML = note(r.error.message, true); else viewPanel();
+  };
+}
+
+async function viewEdit(id){
+  if (!session) return location.hash = "#/login";
+  const isNew = id === "new";
+  if (isNew && role !== "admin") return location.hash = "#/panel";
+  let m = { name:"", name_urdu:"", area:"", address:"", city:"Hyderabad", phone:"", khutbah1:"", khutbah2:"", timings:{} };
+  if (!isNew){ const r = await db.from("masjids").select("*").eq("id", id).maybeSingle(); if (!r.data) return app.innerHTML = note("Masjid not found.", true); m = r.data; }
+  const adm = role === "admin";
+  const back = adm ? `<a class="top" href="#/panel">&lsaquo; Admin panel</a>` : `<button class="btn alt sm" onclick="logout()">Log out</button>`;
+  app.innerHTML = `${back}<h1>${isNew ? "Add masjid" : esc(m.name)}</h1>
+    ${adm ? `<label>Masjid name</label><input id="f_name" value="${esc(m.name)}">
+    <label>Name in Urdu (optional)</label><input id="f_urdu" class="ur" value="${esc(m.name_urdu)}">
+    <label>Area (for search)</label><input id="f_area" value="${esc(m.area)}">
+    <label>Full address</label><input id="f_addr" value="${esc(m.address)}">
+    <label>Phone (optional)</label><input id="f_phone" value="${esc(m.phone)}">
+    <label>Map location (for Near me and directions)</label>
+    <div class="row"><input id="f_lat" placeholder="Latitude" value="${m.lat ?? ""}"><input id="f_lng" placeholder="Longitude" value="${m.lng ?? ""}"></div>
+    <p><button class="btn alt sm" id="loc" type="button">Use my current location</button> <small style="color:var(--mute)">Tap while you are at the masjid.</small></p>` : ""}
+    <h2>Photo</h2>${m.photo_url ? `<img class="hero" src="${esc(m.photo_url)}" alt="">` : ""}<input type="file" id="f_photo" accept="image/*">
+    <h2>Namaz timings</h2>
+    <div class="grid"><span></span><b>Azan</b><b>Jamaat</b>
+    ${PR.map(([k,n]) => `<span>${n}</span><input type="time" id="a_${k}" value="${m.timings?.[k]?.azan||""}"><input type="time" id="j_${k}" value="${m.timings?.[k]?.jamaat||""}">`).join("")}</div>
+    <h2>Friday Jumu'ah</h2>
+    <div class="grid"><span>Khutbah 1</span><input type="time" id="k1" value="${m.khutbah1||""}"><span></span><span>Khutbah 2</span><input type="time" id="k2" value="${m.khutbah2||""}"><span></span></div>
+    <p><button class="btn full" id="save">Save</button></p><div id="out"></div>`;
+  if (adm) $("loc").onclick = () => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => { $("f_lat").value = p.coords.latitude.toFixed(6); $("f_lng").value = p.coords.longitude.toFixed(6); }, () => alert("Please allow location access.")) : alert("Location is not available.");
+  $("save").onclick = async () => {
+    const timings = {}; PR.forEach(([k]) => timings[k] = { azan: $("a_"+k).value, jamaat: $("j_"+k).value });
+    const row = { timings, khutbah1: $("k1").value || null, khutbah2: $("k2").value || null };
+    if (adm){
+      if (!$("f_name").value.trim() || !$("f_area").value.trim()) return $("out").innerHTML = note("Please enter the masjid name and area.", true);
+      Object.assign(row, { name: $("f_name").value.trim(), name_urdu: $("f_urdu").value.trim() || null, area: $("f_area").value.trim(), address: $("f_addr").value.trim() || null, phone: $("f_phone").value.trim() || null, lat: $("f_lat").value === "" ? null : Number($("f_lat").value), lng: $("f_lng").value === "" ? null : Number($("f_lng").value) });
+    }
+    const r = isNew ? await db.from("masjids").insert(row).select() : await db.from("masjids").update(row).eq("id", id).select();
+    if (r.error) return $("out").innerHTML = note(r.error.message, true);
+    if (!r.data || !r.data.length) return $("out").innerHTML = note("Could not save. You may not have permission.", true);
+    const file = $("f_photo").files[0];
+    if (file){
+      const mid = r.data[0].id, path = mid + "/photo.jpg";
+      try{
+        const blob = await shrink(file);
+        const up = await db.storage.from("masjid-photos").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+        if (up.error) throw up.error;
+        const url = db.storage.from("masjid-photos").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
+        await db.from("masjids").update({ photo_url: url }).eq("id", mid);
+      }catch(e){ return $("out").innerHTML = note("Saved, but the photo failed: " + e.message, true); }
+    }
+    if (adm) location.hash = "#/panel"; else $("out").innerHTML = note("Saved. The public page is updated.");
+  };
+}
+
+function shrink(file){ return new Promise((ok, no) => { const im = new Image(); im.onload = () => { const s = Math.min(1, 900/Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = im.width*s; c.height = im.height*s; c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); c.toBlob(ok, "image/jpeg", 0.82); }; im.onerror = no; im.src = URL.createObjectURL(file); }); }
+
+async function logout(){ await db.auth.signOut(); await loadRole(); location.hash = "#/"; route(); }
+
+window.addEventListener("hashchange", route);
+loadRole().then(route);
+</script>
+</body>
+</html>
